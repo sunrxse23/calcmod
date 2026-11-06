@@ -17,8 +17,8 @@ public class CalcMod implements ClientModInitializer {
             try {
                 double result = new Parser(m).parse();
                 Minecraft mc = Minecraft.getInstance();
-                                if (mc.player != null) {
-                    mc.gui.getChat().addMessage(
+                                                if (mc.player != null) {
+                    mc.player.sendSystemMessage(
                         Component.literal("[Calc] ").withStyle(ChatFormatting.AQUA)
                             .append(Component.literal(m + " = ").withStyle(ChatFormatting.GRAY))
                             .append(Component.literal(format(result)).withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD)));
