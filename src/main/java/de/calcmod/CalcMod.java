@@ -17,7 +17,7 @@ public class CalcMod implements ClientModInitializer {
             try {
                 double result = new Parser(m).parse();
                 Minecraft mc = Minecraft.getInstance();
-                                                if (mc.player != null) {
+                if (mc.player != null) {
                     mc.player.sendSystemMessage(
                         Component.literal("[Calc] ").withStyle(ChatFormatting.AQUA)
                             .append(Component.literal(m + " = ").withStyle(ChatFormatting.GRAY))
@@ -66,26 +66,36 @@ public class CalcMod implements ClientModInitializer {
             return x;
         }
 
+        // true, wenn der zuletzt gelesene Term ein reines Prozent ist (z.B. "20%")
+        private boolean percentTerm = false;
+
         double expr() {
             double x = term();
             for (;;) {
-                if (eat('+')) x += term();
-                else if (eat('-')) x -= term();
-                else return x;
+                if (eat('+')) {
+                    double t = term();
+                    x = percentTerm ? x + x * t : x + t; // 150+20% = 180
+                } else if (eat('-')) {
+                    double t = term();
+                    x = percentTerm ? x - x * t : x - t; // 150-20% = 120
+                } else return x;
             }
         }
 
         double term() {
             double x = factor();
+            boolean pct = percentTerm;
             for (;;) {
-                if (eat('*')) x *= factor();
+                if (eat('*')) { x *= factor(); pct = false; }
                 else if (eat('/')) {
                     double d = factor();
                     if (d == 0) throw new RuntimeException("Division durch 0");
                     x /= d;
+                    pct = false;
                 }
-                else if (eat('%')) x %= factor();
-                else return x;
+                else if (eat('%')) { x %= factor(); pct = false; } // Modulo: 10%3
+                else if (eatWord("von") || eatWord("of")) { x *= factor(); pct = false; } // 20% von 150
+                else { percentTerm = pct; return x; }
             }
         }
 
@@ -93,8 +103,41 @@ public class CalcMod implements ClientModInitializer {
             if (eat('+')) return factor();
             if (eat('-')) return -factor();
             double x = atom();
-            if (eat('^')) x = Math.pow(x, factor()); // rechtsassoziativ
+            percentTerm = false;
+            if (percentIsPostfix()) { // "20%" = 0.2
+                eat('%');
+                x /= 100;
+                percentTerm = true;
+            }
+            if (eat('^')) { x = Math.pow(x, factor()); percentTerm = false; } // rechtsassoziativ
             return x;
+        }
+
+        /** Ist das nächste % ein Prozentzeichen (20%) und kein Modulo (10%3)? */
+        boolean percentIsPostfix() {
+            int i = pos;
+            while (i < s.length() && s.charAt(i) == ' ') i++;
+            if (i >= s.length() || s.charAt(i) != '%') return false;
+            i++;
+            while (i < s.length() && s.charAt(i) == ' ') i++;
+            if (i >= s.length()) return true;
+            char c = s.charAt(i);
+            if (Character.isDigit(c) || c == '.' || c == '(') return false;
+            if (Character.isLetter(c)) return s.regionMatches(true, i, "von", 0, 3) || s.regionMatches(true, i, "of", 0, 2);
+            return true;
+        }
+
+        boolean eatWord(String w) {
+            while (ch == ' ') next();
+            if (pos >= 0 && s.regionMatches(true, pos, w, 0, w.length())) {
+                int e = pos + w.length();
+                if (e >= s.length() || !Character.isLetter(s.charAt(e))) {
+                    pos = e - 1;
+                    next();
+                    return true;
+                }
+            }
+            return false;
         }
 
         double atom() {
